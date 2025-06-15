@@ -23,6 +23,22 @@ export const DrawingCanvas = React.forwardRef<
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const canvasInitializedRef = useRef(false);
+  const [cursorStyle, setCursorStyle] = useState<React.CSSProperties>({});
+
+  // Update cursor style when tool changes
+  useEffect(() => {
+    if (activeTool === "eraser") {
+      // Create a custom eraser cursor using CSS
+      setCursorStyle({
+        cursor: `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15.5 2.5a2.121 2.121 0 0 1 3 3L12 12l-4 1 1-4 6.5-6.5z"/></svg>') 0 24, auto`,
+      });
+    } else {
+      // Pen cursor - crosshair is good for drawing
+      setCursorStyle({
+        cursor: "crosshair",
+      });
+    }
+  }, [activeTool]);
 
   // Initialize canvas only once
   useEffect(() => {
@@ -165,9 +181,10 @@ export const DrawingCanvas = React.forwardRef<
     <div className="relative w-full h-full">
       <canvas
         ref={canvasRef}
-        className={`w-full h-full cursor-${
-          activeTool === "pen" ? "crosshair" : "cell"
-        } border shadow-sm rounded-md bg-white ${className || ""}`}
+        style={cursorStyle}
+        className={`w-full h-full border shadow-sm rounded-md bg-white ${
+          className || ""
+        }`}
         onMouseDown={startDrawing}
         onMouseMove={draw}
         onMouseUp={stopDrawing}
