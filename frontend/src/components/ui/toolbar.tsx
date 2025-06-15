@@ -113,7 +113,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           disabled={isLoading}
           className="bg-blue-600 hover:bg-blue-700"
         >
-          {isLoading ? "Processing..." : "Calculate"}
+          {isLoading ? "Processing..." : "Analyze Drawing"}
         </Button>
       </div>
     </div>

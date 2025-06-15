@@ -88,6 +88,19 @@
   .tool-button {
     @apply rounded-full flex items-center justify-center transition-colors;
   }
+  
+  .whitespace-pre-wrap {
+    white-space: pre-wrap;
+  }
+
+  .text-result {
+    @apply bg-white dark:bg-gray-800 p-3 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700;
+    transition: transform 0.2s ease;
+  }
+
+  .text-result:hover {
+    transform: scale(1.02);
+  }
 }
 
 /* Added MathJax styling improvements */

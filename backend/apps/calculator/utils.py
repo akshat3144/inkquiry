@@ -72,3 +72,20 @@ def analyze_image(img: Image, dict_of_vars: dict):
         else:
             answer['assign'] = False
     return answers
+
+# Add this utility function to help parse different types of responses
+def format_response(response):
+    # If it's a descriptive text response with no clear math expressions
+    import re
+    if isinstance(response.get('result'), str) and not re.search(r'[\^=<>+\-*/\d\(\)\[\]\{\}]', response.get('result', '')):
+        # Format as descriptive text
+        return {
+            "expression": response.get('expr') or "Drawing analysis",
+            "answer": response.get('result')
+        }
+    
+    # Otherwise, treat as math expression
+    return {
+        "expression": response.get('expr'),
+        "answer": response.get('result')
+    }

@@ -109,15 +109,37 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
           </div>
         ) : (
           <div className="space-y-3">
-            {results.map((result, index) => (
-              <div
-                key={index}
-                className="bg-gray-50 rounded-md p-3 border border-gray-100"
-              >
-                <div className="latex-content mb-1">{`\\(\\displaystyle{${result.expression}}\\)`}</div>
-                <div className="text-blue-600 font-medium">{`\\(\\displaystyle{${result.answer}}\\)`}</div>
-              </div>
-            ))}
+            {[...results].reverse().map((result, index) => {
+              // Check if this is a mathematical expression or descriptive text
+              const isMathExpression = /[\^=<>+\-*/\d()[\]{}]/.test(
+                result.expression
+              );
+
+              return (
+                <div
+                  key={index}
+                  className="bg-gray-50 rounded-md p-3 border border-gray-100 dark:bg-gray-800 dark:border-gray-700"
+                >
+                  {isMathExpression ? (
+                    // Math expression display with LaTeX
+                    <>
+                      <div className="latex-content mb-1">{`\\(\\displaystyle{${result.expression}}\\)`}</div>
+                      <div className="text-blue-600 font-medium dark:text-blue-400">{`\\(\\displaystyle{${result.answer}}\\)`}</div>
+                    </>
+                  ) : (
+                    // Regular text display with proper formatting
+                    <>
+                      <h3 className="text-gray-700 font-medium mb-2 dark:text-gray-300">
+                        {result.expression}
+                      </h3>
+                      <div className="mt-2 text-blue-600 font-medium dark:text-blue-400">
+                        {result.answer}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
