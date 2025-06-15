@@ -1,11 +1,11 @@
-import React, { useEffect, useRef, forwardRef, useImperativeHandle } from "react";
+import React, { useEffect, useRef, useImperativeHandle, useState } from "react";
 
-// Define the ref type
-export interface DrawingCanvasRef {
+// Make the ref accessible from outside
+export type DrawingCanvasRef = {
   resetCanvas: () => void;
   getDataURL: () => string | undefined;
   setCompositeOperation: (operation: GlobalCompositeOperation) => void;
-}
+};
 
 interface DrawingCanvasProps {
   activeTool: "pen" | "eraser";
@@ -16,19 +16,16 @@ interface DrawingCanvasProps {
   className?: string;
 }
 
-export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
-  activeTool,
-  brushSize,
-  eraserSize,
-  color,
-  className,
-}, ref) => {
+export const DrawingCanvas = React.forwardRef<
+  DrawingCanvasRef,
+  DrawingCanvasProps
+>(({ activeTool, brushSize, eraserSize, color, className }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = React.useState(false);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const canvasInitializedRef = useRef(false);
 
-  // Canvas setup
+  // Initialize canvas only once
   useEffect(() => {
-    // Initialize canvas
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext("2d");
@@ -37,31 +34,50 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
         const resizeCanvas = () => {
           const container = canvas.parentElement;
           if (container) {
+            // Store the current drawing if already initialized
+            let imageData = null;
+            if (canvasInitializedRef.current) {
+              imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            }
+
             canvas.width = container.clientWidth;
             canvas.height = container.clientHeight;
+
+            // Set default properties
             ctx.lineCap = "round";
             ctx.lineJoin = "round";
-            ctx.lineWidth = activeTool === "pen" ? brushSize : eraserSize;
-            ctx.strokeStyle = activeTool === "pen" ? color : "#ffffff";
             ctx.fillStyle = "#ffffff"; // White background
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Restore drawing if it existed
+            if (imageData) {
+              try {
+                ctx.putImageData(imageData, 0, 0);
+              } catch (error) {
+                console.log(`Could not restore canvas data during resize: ${error}`);
+              }
+            }
           }
         };
 
         resizeCanvas();
         window.addEventListener("resize", resizeCanvas);
+        canvasInitializedRef.current = true;
+
         return () => {
           window.removeEventListener("resize", resizeCanvas);
         };
       }
     }
-  }, [brushSize, eraserSize, color, activeTool]);
+  }, []);
 
+  // Only update drawing properties without clearing canvas
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext("2d");
       if (ctx) {
+        // Only update the properties we need for the tool change
         ctx.lineWidth = activeTool === "pen" ? brushSize : eraserSize;
         ctx.strokeStyle = activeTool === "pen" ? color : "#ffffff";
         if (activeTool === "pen") {
@@ -85,6 +101,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
         if (activeTool === "pen") {
           ctx.strokeStyle = color;
           ctx.lineWidth = brushSize;
+          ctx.globalCompositeOperation = "source-over";
         } else if (activeTool === "eraser") {
           ctx.strokeStyle = "#ffffff"; // White for eraser
           ctx.lineWidth = eraserSize;
@@ -111,14 +128,6 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
   };
 
   const stopDrawing = () => {
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext("2d");
-      if (ctx && activeTool === "eraser") {
-        // Reset composite operation back to default after using eraser
-        ctx.globalCompositeOperation = "source-over";
-      }
-    }
     setIsDrawing(false);
   };
 
@@ -129,11 +138,14 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
       if (ctx) {
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Reset to default composite operation
+        ctx.globalCompositeOperation = "source-over";
       }
     }
   };
-  
-  // Expose canvas methods to parent via ref
+
+  // Expose canvas methods to parent via ref - always include this hook!
   useImperativeHandle(
     ref,
     () => ({
@@ -146,7 +158,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
         }
       },
     }),
-    []
+    [] // Empty dependency array so this doesn't change between renders
   );
 
   return (
@@ -161,7 +173,15 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
         onMouseUp={stopDrawing}
         onMouseOut={stopDrawing}
       />
+
       {/* Tool indicator */}
+      <div className="absolute top-6 right-6 bg-white bg-opacity-70 border border-gray-200 rounded-md px-2 py-1 text-xs text-gray-600 shadow-sm">
+        {activeTool === "pen"
+          ? `Pen (${brushSize}px)`
+          : `Eraser (${eraserSize}px)`}
+      </div>
     </div>
   );
 });
+
+DrawingCanvas.displayName = "DrawingCanvas";
