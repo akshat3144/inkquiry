@@ -51,9 +51,12 @@ export default function Home() {
     Array<GeneratedResult>
   >([]);
 
-  // Initialize on mount
+  // Results panel state
+  const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
+  const [resultsChanged, setResultsChanged] = useState(false);
+
+  // Effect for initializing active page
   useEffect(() => {
-    // Always make sure we have a page selected
     if (pages.length > 0 && !activePage) {
       setActivePage(pages[0].id);
     }
@@ -115,7 +118,18 @@ export default function Home() {
         ...prevResults,
         ...currentResults,
       ]);
+
+      // Set this flag to true when results change
+      setResultsChanged(true);
+
+      // Reset flag after a delay
+      const timer = setTimeout(() => {
+        setResultsChanged(false);
+      }, 500);
+
       setCurrentResults([]);
+
+      return () => clearTimeout(timer);
     }
   }, [currentResults, activePage]);
 
@@ -278,10 +292,12 @@ export default function Home() {
             transition: "width 0.3s ease-in-out, margin-left 0.3s ease-in-out",
           }}
         >
-          {/* Drawing canvas */}
+          {/* Drawing canvas area - grows when results are collapsed */}
           <div
-            className="flex-1 p-4 relative"
-            style={{ height: "calc(70% - 1rem)" }}
+            className="flex-1 transition-all duration-300 ease-in-out p-4 relative"
+            style={{
+              height: isResultsCollapsed ? "calc(100% - 60px)" : "70%",
+            }}
           >
             <DrawingCanvas
               ref={canvasRef}
@@ -292,15 +308,25 @@ export default function Home() {
             />
           </div>
 
-          {/* Results area */}
-          <div className="p-4" style={{ height: "calc(30%)" }}>
+          {/* Results area - only header is visible when collapsed */}
+          <div
+            className="transition-all duration-300 ease-in-out p-4"
+            style={{
+              height: isResultsCollapsed ? "60px" : "30%",
+              padding: "1rem",
+            }}
+          >
             <ResultsDisplay
               results={currentPageResults}
               title={`Results - ${
                 pages.find((p) => p.id === activePage)?.name || "Current Page"
               }`}
               onClear={clearResults}
-              className="h-full overflow-auto"
+              className="h-full"
+              isCollapsed={isResultsCollapsed}
+              onToggleCollapse={setIsResultsCollapsed}
+              autoExpandOnNewResults={true}
+              resultsChanged={resultsChanged}
             />
           </div>
         </div>
