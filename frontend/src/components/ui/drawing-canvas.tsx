@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useImperativeHandle, useState } from "react";
 
-// Make the ref accessible from outside
+// Update the DrawingCanvasRef type
 export type DrawingCanvasRef = {
   resetCanvas: () => void;
   getDataURL: () => string | undefined;
   setCompositeOperation: (operation: GlobalCompositeOperation) => void;
+  loadFromDataURL: (dataURL: string) => void; // Add this method
 };
 
 interface DrawingCanvasProps {
@@ -70,7 +71,9 @@ export const DrawingCanvas = React.forwardRef<
               try {
                 ctx.putImageData(imageData, 0, 0);
               } catch (error) {
-                console.log(`Could not restore canvas data during resize: ${error}`);
+                console.log(
+                  `Could not restore canvas data during resize: ${error}`
+                );
               }
             }
           }
@@ -171,6 +174,22 @@ export const DrawingCanvas = React.forwardRef<
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) {
           ctx.globalCompositeOperation = operation;
+        }
+      },
+      loadFromDataURL: (dataURL: string) => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            const img = new Image();
+            img.onload = () => {
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              ctx.fillStyle = "#ffffff";
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.drawImage(img, 0, 0);
+            };
+            img.src = dataURL;
+          }
         }
       },
     }),

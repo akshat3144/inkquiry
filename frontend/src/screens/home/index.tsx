@@ -199,6 +199,29 @@ export default function Home() {
 
   // Notebook page management
   const addPage = () => {
+    // Don't add more pages if we've reached the maximum
+    if (pages.length >= 5) {
+      alert("Maximum of 5 pages allowed");
+      return;
+    }
+
+    // Save current page's canvas and results before creating a new one
+    if (activePage && canvasRef.current) {
+      const currentCanvasData = canvasRef.current.getDataURL();
+
+      setPages((prevPages) =>
+        prevPages.map((page) =>
+          page.id === activePage
+            ? {
+                ...page,
+                content: currentPageResults,
+                canvasData: currentCanvasData,
+              }
+            : page
+        )
+      );
+    }
+
     const newPage = {
       id: uuidv4(),
       name: `Page ${pages.length + 1}`,
@@ -209,12 +232,50 @@ export default function Home() {
     setPages([...pages, newPage]);
     setActivePage(newPage.id);
     setCurrentPageResults([]);
+
+    // Clear the canvas for the new page
+    if (canvasRef.current) {
+      canvasRef.current.resetCanvas();
+    }
   };
 
   const selectPage = (id: string) => {
+    // Save current page's canvas and results before switching
+    if (activePage && canvasRef.current) {
+      const currentCanvasData = canvasRef.current.getDataURL();
+
+      setPages((prevPages) =>
+        prevPages.map((page) =>
+          page.id === activePage
+            ? {
+                ...page,
+                content: currentPageResults,
+                canvasData: currentCanvasData,
+              }
+            : page
+        )
+      );
+    }
+
+    // Set the new active page
     setActivePage(id);
+
+    // Find the page we're switching to
     const page = pages.find((p) => p.id === id);
+
+    // Update the results display
     setCurrentPageResults(page?.content || []);
+
+    // Clear canvas and restore the page's canvas data if it exists
+    if (canvasRef.current) {
+      canvasRef.current.resetCanvas();
+
+      if (page?.canvasData) {
+        setTimeout(() => {
+          canvasRef.current?.loadFromDataURL(page.canvasData!);
+        }, 50); // Small delay to ensure canvas is reset first
+      }
+    }
   };
 
   const renamePage = (id: string, name: string) => {

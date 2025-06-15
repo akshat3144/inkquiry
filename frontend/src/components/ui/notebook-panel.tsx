@@ -9,6 +9,7 @@ export interface NotebookPage {
     expression: string;
     answer: string;
   }>;
+  canvasData?: string; // Add this to store the canvas image data
 }
 
 interface NotebookPanelProps {
@@ -20,6 +21,7 @@ interface NotebookPanelProps {
   onRenamePage: (id: string, name: string) => void;
   onDeletePage: (id: string) => void;
   onToggle: () => void;
+  maxPages?: number; // Optional with default of 5
 }
 
 export const NotebookPanel: React.FC<NotebookPanelProps> = ({
