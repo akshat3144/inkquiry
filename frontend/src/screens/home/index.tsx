@@ -209,8 +209,17 @@ export default function Home() {
     if (activePage && canvasRef.current) {
       const currentCanvasData = canvasRef.current.getDataURL();
 
-      setPages((prevPages) =>
-        prevPages.map((page) =>
+      // Create a new page
+      const newPage = {
+        id: uuidv4(),
+        name: `Page ${pages.length + 1}`,
+        dateCreated: new Date(),
+        content: [],
+      };
+
+      // Update pages with both the saved current page and the new page
+      setPages((prevPages) => [
+        ...prevPages.map((page) =>
           page.id === activePage
             ? {
                 ...page,
@@ -218,24 +227,18 @@ export default function Home() {
                 canvasData: currentCanvasData,
               }
             : page
-        )
-      );
-    }
+        ),
+        newPage,
+      ]);
 
-    const newPage = {
-      id: uuidv4(),
-      name: `Page ${pages.length + 1}`,
-      dateCreated: new Date(),
-      content: [],
-    };
+      // Set active page and clear results
+      setActivePage(newPage.id);
+      setCurrentPageResults([]);
 
-    setPages([...pages, newPage]);
-    setActivePage(newPage.id);
-    setCurrentPageResults([]);
-
-    // Clear the canvas for the new page
-    if (canvasRef.current) {
-      canvasRef.current.resetCanvas();
+      // Clear the canvas for the new page
+      if (canvasRef.current) {
+        canvasRef.current.resetCanvas();
+      }
     }
   };
 
