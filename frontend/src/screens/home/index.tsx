@@ -502,8 +502,8 @@ export default function Home() {
         canvasData: canvasData, // Camel case for frontend
         content: currentPageResults || [],
         // Ensure date is in ISO string format
-        date_created: (currentPage.dateCreated || new Date()).toISOString(),
-        dateCreated: (currentPage.dateCreated || new Date()).toISOString(),
+        date_created: (currentPage.dateCreated instanceof Date ? currentPage.dateCreated : new Date()).toISOString(),
+        dateCreated: (currentPage.dateCreated instanceof Date ? currentPage.dateCreated : new Date()).toISOString(),
       };
 
       // Check if this page has been saved before
