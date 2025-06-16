@@ -1,12 +1,12 @@
-fastapi==0.110.0
-uvicorn==0.28.0
-pydantic==2.6.0
-python-dotenv==1.0.1
-google-generativeai==0.3.2
-Pillow==9.5.0  # Use an older version that has pre-built wheels for Render
-python-multipart==0.0.7
-pyjwt==2.8.0
-passlib==1.7.4
-bcrypt==4.1.2
-pymongo==4.6.1
-email-validator==2.1.1
+fastapi
+uvicorn
+pydantic
+python-dotenv
+google-generativeai
+Pillow
+python-multipart
+pyjwt
+passlib
+bcrypt
+pymongo
+email-validator
