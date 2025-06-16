@@ -464,11 +464,12 @@ export default function Home() {
     if (!activePage) return;
 
     try {
-      setIsSaving(true); // Find the current active page
+      setIsSaving(true);
+      // Find the current active page
       const currentPage = pages.find((page) => page.id === activePage);
       if (!currentPage) return;
 
-      // Get the current canvas data - this captures the current drawing
+      // Get the current canvas data
       let canvasData;
 
       try {
@@ -494,16 +495,29 @@ export default function Home() {
         setIsSaving(false);
         return;
       }
+
+      // Ensure all content results have string values
+      const stringifiedContent = currentPageResults.map((result) => ({
+        expression: String(result.expression),
+        answer: String(result.answer),
+      }));
+
       // Prepare the page data for saving
       const pageToSave = {
         id: currentPage.id,
         name: currentPage.name,
         canvas_data: canvasData, // Snake case for backend
         canvasData: canvasData, // Camel case for frontend
-        content: currentPageResults || [],
+        content: stringifiedContent,
         // Ensure date is in ISO string format
-        date_created: (currentPage.dateCreated instanceof Date ? currentPage.dateCreated : new Date()).toISOString(),
-        dateCreated: (currentPage.dateCreated instanceof Date ? currentPage.dateCreated : new Date()).toISOString(),
+        date_created: (currentPage.dateCreated instanceof Date
+          ? currentPage.dateCreated
+          : new Date()
+        ).toISOString(),
+        dateCreated: (currentPage.dateCreated instanceof Date
+          ? currentPage.dateCreated
+          : new Date()
+        ).toISOString(),
       };
 
       // Check if this page has been saved before
