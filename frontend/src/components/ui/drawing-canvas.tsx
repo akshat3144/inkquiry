@@ -5,7 +5,8 @@ export type DrawingCanvasRef = {
   resetCanvas: () => void;
   getDataURL: () => string | undefined;
   setCompositeOperation: (operation: GlobalCompositeOperation) => void;
-  loadFromDataURL: (dataURL: string) => void; // Add this method
+  loadFromDataURL: (dataURL: string) => void;
+  forceRefresh: () => void; // Add method to force a redraw
 };
 
 interface DrawingCanvasProps {
@@ -40,25 +41,37 @@ export const DrawingCanvas = React.forwardRef<
       });
     }
   }, [activeTool]);
-
   // Initialize canvas only once
   useEffect(() => {
+    console.log("Initializing canvas...");
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext("2d");
       if (ctx) {
         // Make canvas responsive to container
         const resizeCanvas = () => {
+          console.log("Canvas resize triggered");
           const container = canvas.parentElement;
           if (container) {
             // Store the current drawing if already initialized
             let imageData = null;
             if (canvasInitializedRef.current) {
-              imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              try {
+                imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                console.log("Saved current canvas state during resize");
+              } catch (error) {
+                console.error("Could not save canvas state:", error);
+              }
             }
 
+            // Update canvas dimensions to match container
+            const oldWidth = canvas.width;
+            const oldHeight = canvas.height;
             canvas.width = container.clientWidth;
             canvas.height = container.clientHeight;
+            console.log(
+              `Resized canvas: ${oldWidth}x${oldHeight} -> ${canvas.width}x${canvas.height}`
+            );
 
             // Set default properties
             ctx.lineCap = "round";
@@ -70,21 +83,30 @@ export const DrawingCanvas = React.forwardRef<
             if (imageData) {
               try {
                 ctx.putImageData(imageData, 0, 0);
+                console.log("Restored canvas drawing after resize");
               } catch (error) {
-                console.log(
+                console.error(
                   `Could not restore canvas data during resize: ${error}`
                 );
               }
             }
           }
-        };
-
+        }; // Initial setup
         resizeCanvas();
-        window.addEventListener("resize", resizeCanvas);
-        canvasInitializedRef.current = true;
 
+        // Set a flag that canvas is initialized
+        setTimeout(() => {
+          canvasInitializedRef.current = true;
+          console.log("Canvas initialization complete");
+        }, 100);
+
+        // Add resize listener
+        window.addEventListener("resize", resizeCanvas);
+
+        // Cleanup function
         return () => {
           window.removeEventListener("resize", resizeCanvas);
+          console.log("Canvas resize listener removed");
         };
       }
     }
@@ -163,33 +185,106 @@ export const DrawingCanvas = React.forwardRef<
       }
     }
   };
-
   // Expose canvas methods to parent via ref - always include this hook!
   useImperativeHandle(
     ref,
     () => ({
       resetCanvas,
-      getDataURL: () => canvasRef.current?.toDataURL("image/png"),
+      getDataURL: () => {
+        try {
+          const dataURL = canvasRef.current?.toDataURL("image/png");
+          console.log("Canvas data retrieved, length:", dataURL?.length || 0);
+          return dataURL;
+        } catch (error) {
+          console.error("Error getting canvas data URL:", error);
+          return undefined;
+        }
+      },
       setCompositeOperation: (operation: GlobalCompositeOperation) => {
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) {
           ctx.globalCompositeOperation = operation;
         }
       },
-      loadFromDataURL: (dataURL: string) => {
+      forceRefresh: () => {
+        // Force a redraw of the canvas
         const canvas = canvasRef.current;
         if (canvas) {
           const ctx = canvas.getContext("2d");
           if (ctx) {
-            const img = new Image();
-            img.onload = () => {
-              ctx.clearRect(0, 0, canvas.width, canvas.height);
-              ctx.fillStyle = "#ffffff";
-              ctx.fillRect(0, 0, canvas.width, canvas.height);
-              ctx.drawImage(img, 0, 0);
-            };
-            img.src = dataURL;
+            // Save current canvas content
+            const imageData = ctx.getImageData(
+              0,
+              0,
+              canvas.width,
+              canvas.height
+            );
+
+            // Clear and redraw
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.putImageData(imageData, 0, 0);
+            console.log("Canvas force refreshed");
           }
+        }
+      },
+      loadFromDataURL: (dataURL: string) => {
+        if (!dataURL || typeof dataURL !== "string") {
+          console.error("Invalid dataURL:", dataURL);
+          return;
+        }
+
+        if (!dataURL.startsWith("data:image/")) {
+          console.error(
+            "Not a valid image data URL:",
+            dataURL.substring(0, 30)
+          );
+          return;
+        }
+
+        try {
+          console.log("Loading canvas from dataURL, length:", dataURL.length);
+          const canvas = canvasRef.current;
+          if (canvas) {
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+              // Create a new image object
+              const img = new Image();
+
+              // Set up a promise to know when loading is complete
+              const loadPromise = new Promise((resolve, reject) => {
+                img.onload = () => {
+                  console.log(
+                    "Image loaded successfully, dimensions:",
+                    img.width,
+                    "x",
+                    img.height
+                  );
+
+                  // Clear canvas and draw white background
+                  ctx.clearRect(0, 0, canvas.width, canvas.height);
+                  ctx.fillStyle = "#ffffff";
+                  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                  // Draw the image to fit the canvas
+                  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                  resolve("Canvas loaded successfully");
+                };
+
+                img.onerror = (error) => {
+                  console.error("Error loading image from dataURL:", error);
+                  reject(error);
+                };
+              });
+
+              // Set the source to trigger loading
+              img.src = dataURL;
+
+              // Return the promise (though we can't really use it with the current ref structure)
+              return loadPromise;
+            }
+          }
+        } catch (error) {
+          console.error("Error in loadFromDataURL:", error);
         }
       },
     }),

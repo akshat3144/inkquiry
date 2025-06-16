@@ -4,12 +4,14 @@ import { Button } from "@/components/ui/button";
 export interface NotebookPage {
   id: string;
   name: string;
-  dateCreated: Date;
+  dateCreated: Date | string; // Allow both Date object and ISO string
+  date_created?: string; // For API communication
   content?: Array<{
     expression: string;
     answer: string;
   }>;
-  canvasData?: string; // Add this to store the canvas image data
+  canvasData?: string; // Used to store the canvas image data
+  canvas_data?: string; // For API communication
 }
 
 interface NotebookPanelProps {

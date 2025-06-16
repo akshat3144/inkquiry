@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { v4 as uuidv4 } from "uuid";
+import { useAuth } from "@/context/AuthContext";
+import { notebookApi } from "@/services/notebookApi";
 import { NotebookPanel, NotebookPage } from "@/components/ui/notebook-panel";
 import { ResultsDisplay } from "@/components/ui/results-display";
 import { Toolbar } from "@/components/ui/toolbar";
@@ -10,6 +12,7 @@ import {
 } from "@/components/ui/drawing-canvas";
 import { VariablesDisplay } from "@/components/ui/variables-display";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
+import { Button } from "@/components/ui/button";
 
 interface GeneratedResult {
   expression: string;
@@ -32,9 +35,13 @@ export default function Home() {
   const [activeTool, setActiveTool] = useState<Tool>("pen");
   const [dictOfVars, setDictOfVars] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [currentResults, setCurrentResults] = useState<Array<GeneratedResult>>(
     []
   );
+
+  // Auth context
+  const { user, logout } = useAuth();
 
   // Notebook state
   const [isNotebookOpen, setIsNotebookOpen] = useState(true);
@@ -50,6 +57,7 @@ export default function Home() {
   const [currentPageResults, setCurrentPageResults] = useState<
     Array<GeneratedResult>
   >([]);
+  const [savedPages, setSavedPages] = useState<string[]>([]);
 
   // Results panel state
   const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
@@ -61,6 +69,87 @@ export default function Home() {
       setActivePage(pages[0].id);
     }
   }, [pages, activePage]);
+  // Effect to load saved pages from MongoDB when component mounts
+  useEffect(() => {
+    if (user) {
+      loadSavedPages();
+    }
+    // We intentionally omit loadSavedPages from dependencies to avoid an infinite loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  // Function to load saved pages from MongoDB
+  const loadSavedPages = async () => {
+    try {
+      setIsLoading(true);
+      console.log("Loading saved pages from server...");
+      const savedPages = await notebookApi.getPages();
+      console.log("Received pages from server:", savedPages.length);
+
+      if (savedPages && savedPages.length > 0) {
+        // Process each page to ensure it has the right format
+        const processedPages = savedPages.map((page) => {
+          // Extract canvas data - handle both field name conventions
+          const rawCanvasData = page.canvas_data || page.canvasData;
+          // Verify canvas data
+          const validCanvasData =
+            rawCanvasData &&
+            verifyCanvasData(`Page ${page.id} load`, rawCanvasData)
+              ? rawCanvasData
+              : undefined;
+
+          // Return properly formatted page
+          return {
+            ...page,
+            id: page.id,
+            name: page.name || `Page ${page.id.substring(0, 4)}`,
+            dateCreated: new Date(page.date_created || page.dateCreated),
+            content: page.content || [],
+            canvasData: validCanvasData,
+          };
+        });
+
+        console.log(
+          "Processed pages:",
+          processedPages.map((p) => ({ id: p.id, hasCanvas: !!p.canvasData }))
+        );
+
+        // Replace current pages with saved ones
+        setPages(processedPages);
+
+        // Set the first saved page as active
+        const firstPage = processedPages[0];
+        setActivePage(firstPage.id);
+        setCurrentPageResults(firstPage.content || []);
+
+        // Mark all pages as saved
+        setSavedPages(processedPages.map((page) => page.id));
+
+        // If the first page has canvas data, load it after a delay
+        if (firstPage.canvasData && canvasRef.current) {
+          // Make sure canvas is properly initialized
+          console.log("Will load canvas data for first page shortly...");
+
+          // More generous timeout to ensure canvas is fully initialized
+          setTimeout(() => {
+            try {
+              console.log("Loading canvas data for first page now");
+              canvasRef.current?.resetCanvas(); // Make sure canvas is clean
+              canvasRef.current?.loadFromDataURL(firstPage.canvasData!);
+            } catch (error) {
+              console.error("Failed to load canvas data:", error);
+            }
+          }, 500); // Longer timeout for better reliability
+        } else {
+          console.log("No canvas data for first page or canvas ref not ready");
+        }
+      }
+    } catch (error) {
+      console.error("Error loading saved pages:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Load MathJax
   useEffect(() => {
@@ -142,14 +231,16 @@ export default function Home() {
   const switchTool = (tool: Tool) => {
     setActiveTool(tool);
   };
-
   const runRoute = async () => {
     if (canvasRef.current && activePage) {
       setIsLoading(true);
-      try {
-        // Make sure we're using default composite operation for sending image
-        canvasRef.current.setCompositeOperation("source-over");
 
+      // Store current composite operation to restore it later
+      const isEraser = activeTool === "eraser";
+
+      try {
+        // Temporarily save the current composite operation but don't change the canvas visually
+        // We're just getting the data URL which doesn't modify the canvas content
         const imageData = canvasRef.current.getDataURL();
         if (!imageData) return;
 
@@ -189,14 +280,18 @@ export default function Home() {
       } finally {
         setIsLoading(false);
 
-        // Restore active tool composite operation
-        if (canvasRef.current && activeTool === "eraser") {
-          canvasRef.current.setCompositeOperation("destination-out");
+        // Force a refresh of the canvas to ensure it looks the same as before
+        if (canvasRef.current) {
+          canvasRef.current.forceRefresh();
+
+          // Make sure eraser is still in eraser mode if that was the active tool
+          if (isEraser) {
+            canvasRef.current.setCompositeOperation("destination-out");
+          }
         }
       }
     }
   };
-
   // Notebook page management
   const addPage = () => {
     // Don't add more pages if we've reached the maximum
@@ -267,35 +362,85 @@ export default function Home() {
     const page = pages.find((p) => p.id === id);
 
     // Update the results display
-    setCurrentPageResults(page?.content || []);
-
-    // Clear canvas and restore the page's canvas data if it exists
+    setCurrentPageResults(page?.content || []); // Clear canvas and restore the page's canvas data if it exists
     if (canvasRef.current) {
+      // Reset canvas first
       canvasRef.current.resetCanvas();
 
-      if (page?.canvasData) {
+      // Check for canvas data in either field format
+      const canvasData = page?.canvas_data || page?.canvasData;
+
+      // Verify the canvas data is valid
+      const isValid = verifyCanvasData(`Select Page ${id}`, canvasData);
+
+      if (isValid && canvasData) {
+        console.log(`Loading canvas for page ${id}...`);
+
+        // Use a longer timeout to ensure canvas is ready
         setTimeout(() => {
-          canvasRef.current?.loadFromDataURL(page.canvasData!);
-        }, 50); // Small delay to ensure canvas is reset first
+          try {
+            if (!canvasRef.current) {
+              console.error("Canvas ref lost during timeout");
+              return;
+            }
+
+            // Double-check canvas is reset
+            canvasRef.current.resetCanvas();
+
+            // Load the canvas data
+            console.log(`Now loading canvas data for page ${id}`);
+            canvasRef.current.loadFromDataURL(canvasData); // Force a refresh of the canvas display
+            if (canvasRef.current && "forceRefresh" in canvasRef.current) {
+              canvasRef.current.forceRefresh();
+            }
+          } catch (error) {
+            console.error("Error loading canvas data for page:", id, error);
+          }
+        }, 300); // Longer delay to ensure canvas is reset first
+      } else {
+        console.log(`Page ${id} has no valid canvas data to load`);
       }
+    } else {
+      console.error("Cannot load canvas data - canvas ref is null");
     }
   };
 
   const renamePage = (id: string, name: string) => {
     setPages(pages.map((page) => (page.id === id ? { ...page, name } : page)));
   };
-
-  const deletePage = (id: string) => {
+  const deletePage = async (id: string) => {
     // Don't delete if it's the only page
     if (pages.length <= 1) return;
 
-    const newPages = pages.filter((page) => page.id !== id);
-    setPages(newPages);
+    try {
+      // If the page was saved to MongoDB, delete it there too
+      if (savedPages.includes(id)) {
+        await notebookApi.deletePage(id);
+        setSavedPages((prev) => prev.filter((pageId) => pageId !== id));
+      }
 
-    // If we deleted the active page, select another one
-    if (activePage === id) {
-      setActivePage(newPages[0].id);
-      setCurrentPageResults(newPages[0].content || []);
+      const newPages = pages.filter((page) => page.id !== id);
+      setPages(newPages);
+
+      // If we deleted the active page, select another one
+      if (activePage === id) {
+        setActivePage(newPages[0].id);
+        setCurrentPageResults(newPages[0].content || []);
+
+        // If the next page has canvas data, load it
+        const nextPage = newPages[0];
+        if (nextPage?.canvasData && canvasRef.current) {
+          setTimeout(() => {
+            canvasRef.current?.loadFromDataURL(nextPage.canvasData!);
+          }, 50);
+        } else if (canvasRef.current) {
+          // Clear canvas if no data
+          canvasRef.current.resetCanvas();
+        }
+      }
+    } catch (error) {
+      console.error("Error deleting page:", error);
+      alert("Failed to delete page. Please try again.");
     }
   };
 
@@ -314,23 +459,158 @@ export default function Home() {
     }
   };
 
+  // Function to save the current page to MongoDB
+  const savePage = async () => {
+    if (!activePage) return;
+
+    try {
+      setIsSaving(true); // Find the current active page
+      const currentPage = pages.find((page) => page.id === activePage);
+      if (!currentPage) return;
+
+      // Get the current canvas data - this captures the current drawing
+      let canvasData;
+
+      try {
+        // Get fresh canvas data from the canvas
+        if (canvasRef.current) {
+          canvasData = canvasRef.current.getDataURL();
+          console.log("Got fresh canvas data from canvas");
+        } else {
+          // Fall back to stored data
+          canvasData = currentPage.canvasData;
+          console.log("Using stored canvas data");
+        }
+      } catch (error) {
+        console.error("Error getting canvas data:", error);
+        canvasData = currentPage.canvasData; // Fallback
+      }
+
+      // Verify the canvas data is valid
+      const isValid = verifyCanvasData("Save", canvasData);
+      if (!isValid) {
+        console.error("Invalid canvas data, cannot save drawing");
+        alert("Could not save your drawing. Please try again.");
+        setIsSaving(false);
+        return;
+      }
+      // Prepare the page data for saving
+      const pageToSave = {
+        id: currentPage.id,
+        name: currentPage.name,
+        canvas_data: canvasData, // Snake case for backend
+        canvasData: canvasData, // Camel case for frontend
+        content: currentPageResults || [],
+        // Ensure date is in ISO string format
+        date_created: (currentPage.dateCreated || new Date()).toISOString(),
+        dateCreated: (currentPage.dateCreated || new Date()).toISOString(),
+      };
+
+      // Check if this page has been saved before
+      if (savedPages.includes(activePage)) {
+        // Update existing page
+        await notebookApi.updatePage(activePage, pageToSave);
+      } else {
+        // Save new page
+        await notebookApi.savePage(pageToSave);
+        setSavedPages((prev) => [...prev, activePage]);
+      }
+
+      alert("Page saved successfully!");
+    } catch (error) {
+      console.error("Error saving page:", error);
+      alert("Failed to save page. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Function to handle user logout
+  const handleLogout = () => {
+    logout();
+  };
+
+  // Debug function to verify canvas data saving and loading
+  const verifyCanvasData = (action: string, data?: string) => {
+    if (!data) {
+      console.warn(`[Canvas Debug - ${action}] No canvas data available`);
+      return false;
+    }
+
+    const isValidData = data.startsWith("data:image/");
+
+    console.log(`[Canvas Debug - ${action}]`, {
+      valid: isValidData,
+      length: data.length,
+      start: data.substring(0, 50) + "...",
+      end: "..." + data.substring(data.length - 20),
+    });
+
+    return isValidData;
+  };
+  // Special effect to ensure canvas is loaded after everything is initialized
+  useEffect(() => {
+    if (pages.length > 0 && activePage && canvasRef.current) {
+      // Find the active page
+      const currentPage = pages.find((page) => page.id === activePage);
+      if (currentPage?.canvasData) {
+        // Wait a bit longer to ensure canvas is fully initialized
+        const timer = setTimeout(() => {
+          console.log(
+            "Delayed canvas loading - ensuring initialization is complete"
+          );
+          try {
+            canvasRef.current?.resetCanvas();
+            canvasRef.current?.loadFromDataURL(currentPage.canvasData!);
+            console.log("Canvas data loaded with delay");
+          } catch (error) {
+            console.error("Error in delayed canvas loading:", error);
+          }
+        }, 1000); // Longer timeout for initialization
+
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [pages, activePage]); // We intentionally omit canvasRef.current from deps as it's a mutable ref
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   return (
     <div className="relative w-full h-screen bg-white overflow-hidden">
       {/* Header */}
       <div className="fixed top-0 left-0 right-0 z-20">
-        <Toolbar
-          activeTool={activeTool}
-          onToolChange={switchTool}
-          onClearCanvas={resetCanvas}
-          brushSize={brushSize}
-          eraserSize={eraserSize}
-          onBrushSizeChange={setBrushSize}
-          onEraserSizeChange={setEraserSize}
-          color={color}
-          onColorChange={setColor}
-          onCalculate={runRoute}
-          isLoading={isLoading}
-        />
+        <div className="flex flex-row items-center justify-between">
+          <Toolbar
+            activeTool={activeTool}
+            onToolChange={switchTool}
+            onClearCanvas={resetCanvas}
+            brushSize={brushSize}
+            eraserSize={eraserSize}
+            onBrushSizeChange={setBrushSize}
+            onEraserSizeChange={setEraserSize}
+            color={color}
+            onColorChange={setColor}
+            onCalculate={runRoute}
+            isLoading={isLoading}
+          />
+
+          {/* Save and Logout Buttons */}
+          <div className="flex items-center gap-2 mr-4">
+            <Button
+              onClick={savePage}
+              disabled={isSaving || isLoading}
+              className="bg-green-500 hover:bg-green-600 text-white"
+            >
+              {isSaving ? "Saving..." : "Save Page"}
+            </Button>
+
+            <Button
+              onClick={handleLogout}
+              className="bg-red-500 hover:bg-red-600 text-white"
+            >
+              Sign Out
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Main layout */}

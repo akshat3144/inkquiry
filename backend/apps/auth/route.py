@@ -60,9 +60,27 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(current_user = Depends(get_current_user)):
-    return {
-        "id": str(current_user["_id"]),
-        "email": current_user["email"],
-        "full_name": current_user["full_name"],
-        "created_at": current_user["created_at"]
-    }
+    try:
+        print(f"Current user request - Email: {current_user.get('email', 'unknown')}")
+        print(f"User data: ID={current_user.get('_id', 'Unknown')}, Name={current_user.get('full_name', 'Not provided')}")
+        
+        # Check if _id exists and is valid
+        if '_id' not in current_user:
+            print("ERROR: User document missing _id field")
+            current_user_id = "unknown"
+        else:
+            current_user_id = str(current_user["_id"])
+            
+        # Create response with safe fallbacks for missing fields
+        return {
+            "id": current_user_id,
+            "email": current_user.get("email", "unknown@example.com"),
+            "full_name": current_user.get("full_name"),
+            "created_at": current_user.get("created_at", datetime.now())
+        }
+    except Exception as e:
+        print(f"Error processing user data in /me endpoint: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing user data: {str(e)}"
+        )

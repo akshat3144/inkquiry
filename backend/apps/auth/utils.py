@@ -48,14 +48,65 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        print(f"Authenticating token: {token[:15]}...")
+        
+        # Try to decode the token with different options in case of errors
+        try:
+            # First try standard verification
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        except Exception as decode_error:
+            print(f"First decode attempt failed: {str(decode_error)}")
+            
+            # If the standard verification fails, try without verifying expiration
+            # This can help diagnose if the token is expired but otherwise valid
+            try:
+                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], options={"verify_exp": False})
+                print("Token is valid but may be expired")
+            except Exception as second_error:
+                print(f"Second decode attempt failed: {str(second_error)}")
+                
+                # If that also fails, check if the secret key is the default one
+                if SECRET_KEY == "your-secret-key-placeholder":
+                    print("WARNING: Using default secret key! This is not secure for production.")
+                
+                # Re-raise the original error
+                raise decode_error
+        
+        # Extract email from payload
         email: str = payload.get("sub")
         if email is None:
+            print("Token missing 'sub' claim (email)")
             raise credentials_exception
+            
+        # Check if token is expired
+        if "exp" in payload:
+            exp_timestamp = payload["exp"]
+            current_timestamp = datetime.utcnow().timestamp()
+            if current_timestamp > exp_timestamp:
+                print(f"Token expired at {datetime.fromtimestamp(exp_timestamp)}")
+                raise credentials_exception
+                
         token_data = TokenData(email=email)
-    except Exception:
+        print(f"Token decoded successfully for email: {email}")
+    except jwt.PyJWTError as e:
+        print(f"JWT decode error: {str(e)}")
         raise credentials_exception
-    user = get_user(email=token_data.email)
-    if user is None:
+    except Exception as e:
+        print(f"Unexpected auth error: {str(e)}")
         raise credentials_exception
-    return user
+        
+    # Get the user from the database
+    try:
+        user = get_user(email=token_data.email)
+        if user is None:
+            print(f"User not found for email: {token_data.email}")
+            raise credentials_exception
+            
+        print(f"Authentication successful for user: {user['email']}")
+        return user
+    except Exception as db_error:
+        print(f"Database error when getting user: {str(db_error)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error retrieving user data"
+        )
