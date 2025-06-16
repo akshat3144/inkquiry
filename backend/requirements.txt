@@ -3,7 +3,7 @@ uvicorn==0.28.0
 pydantic==2.6.0
 python-dotenv==1.0.1
 google-generativeai==0.3.2
-Pillow==10.2.0
+Pillow==9.5.0  # Use an older version that has pre-built wheels for Render
 python-multipart==0.0.7
 pyjwt==2.8.0
 passlib==1.7.4
