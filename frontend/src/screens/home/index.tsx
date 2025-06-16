@@ -295,8 +295,8 @@ export default function Home() {
   // Notebook page management
   const addPage = () => {
     // Don't add more pages if we've reached the maximum
-    if (pages.length >= 5) {
-      alert("Maximum of 5 pages allowed");
+    if (pages.length >= 10) {
+      alert("Maximum of 10 pages allowed");
       return;
     }
 
