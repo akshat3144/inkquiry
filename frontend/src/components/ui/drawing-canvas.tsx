@@ -130,13 +130,44 @@ export const DrawingCanvas = React.forwardRef<
     }
   }, [activeTool, brushSize, eraserSize, color]);
 
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  // Helper function to get coordinates for both mouse and touch events
+  const getEventCoordinates = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+
+    const rect = canvas.getBoundingClientRect();
+
+    if ("touches" in e) {
+      // Touch event
+      const touch = e.touches[0] || e.changedTouches[0];
+      return {
+        x: touch.clientX - rect.left,
+        y: touch.clientY - rect.top,
+      };
+    } else {
+      // Mouse event
+      return {
+        x: e.nativeEvent.offsetX,
+        y: e.nativeEvent.offsetY,
+      };
+    }
+  };
+
+  const startDrawing = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => {
+    e.preventDefault(); // Prevent scrolling on touch devices
+
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext("2d");
       if (ctx) {
+        const coords = getEventCoordinates(e);
+
         ctx.beginPath();
-        ctx.moveTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+        ctx.moveTo(coords.x, coords.y);
 
         // Set stroke style based on active tool
         if (activeTool === "pen") {
@@ -144,7 +175,7 @@ export const DrawingCanvas = React.forwardRef<
           ctx.lineWidth = brushSize;
           ctx.globalCompositeOperation = "source-over";
         } else if (activeTool === "eraser") {
-          ctx.strokeStyle = "#ffffff"; // White for eraser
+          ctx.strokeStyle = "#ffffff";
           ctx.lineWidth = eraserSize;
           ctx.globalCompositeOperation = "destination-out";
         }
@@ -154,21 +185,34 @@ export const DrawingCanvas = React.forwardRef<
     }
   };
 
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const draw = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => {
+    e.preventDefault(); // Prevent scrolling on touch devices
+
     if (!isDrawing) {
       return;
     }
+
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext("2d");
       if (ctx) {
-        ctx.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+        const coords = getEventCoordinates(e);
+        ctx.lineTo(coords.x, coords.y);
         ctx.stroke();
       }
     }
   };
 
-  const stopDrawing = () => {
+  const stopDrawing = (
+    e?:
+      | React.MouseEvent<HTMLCanvasElement>
+      | React.TouchEvent<HTMLCanvasElement>
+  ) => {
+    if (e) {
+      e.preventDefault();
+    }
     setIsDrawing(false);
   };
 
@@ -295,14 +339,23 @@ export const DrawingCanvas = React.forwardRef<
     <div className="relative w-full h-full">
       <canvas
         ref={canvasRef}
-        style={cursorStyle}
+        style={{
+          ...cursorStyle,
+          touchAction: "none", // Prevent default touch behaviors like zooming/scrolling
+        }}
         className={`w-full h-full border shadow-sm rounded-md bg-white ${
           className || ""
         }`}
+        // Mouse events
         onMouseDown={startDrawing}
         onMouseMove={draw}
         onMouseUp={stopDrawing}
         onMouseOut={stopDrawing}
+        // Touch events for iPad/mobile
+        onTouchStart={startDrawing}
+        onTouchMove={draw}
+        onTouchEnd={stopDrawing}
+        onTouchCancel={stopDrawing}
       />
 
       {/* Tool indicator */}
